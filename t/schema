@@ -1,0 +1,92 @@
+use constant ID_LEN => 64;
+
+sub create_repository {
+    my($schema, $table_name) = @_;
+    
+    my $object_table = $schema -> make_table(
+        name => $table_name
+    );
+
+    $object_table -> make_column(
+        name => (lc $table_name),
+        type => 'int',
+        primary_key => 1,
+        sequenced => 1,
+        nullable => 1,
+    );
+
+    $object_table -> make_column(
+        name => 'name',
+        type => 'char',
+        length => ID_LEN,
+    );
+
+    $object_table -> make_column(
+        name => 'revision',
+        type => 'char',
+        length => ID_LEN,
+    );
+
+    $object_table -> make_column(
+        name => 'modify_timestamp',
+        type => 'timestamp',
+        nullable => 1,
+    );
+
+    $object_table -> make_column(
+        name => 'log',
+        type => 'text',
+    );
+
+    $object_table -> make_index(
+        columns => [map { $object_table -> column($_) } qw(name revision)],
+        unique => 1,
+    );
+
+    my $tag_table = $schema -> make_table(
+        name => $table_name . "_Tag"
+    );
+
+    $tag_table -> make_column(
+        name => 'name',
+        type => 'char',
+        length => ID_LEN,
+    );
+
+    $tag_table -> make_column(
+        name => 'tag',
+        type => 'char',
+        length => ID_LEN,
+        primary_key => 1,
+    );
+
+    $tag_table -> make_column(
+        name => 'revision',
+        type => 'char',
+        length => ID_LEN,
+    );
+
+    $tag_table -> make_index(
+        columns => [map { $tag_table -> column($_) } qw(name revision)],
+        unique => 1,
+    );
+
+    my $desc_table = $schema -> make_table(
+        name => $table_name . "_Description"
+    );
+
+    $desc_table -> make_column(
+        name => 'name',
+        type => 'char',
+        length => ID_LEN,
+        primary_key => 1,
+    );
+
+    $desc_table -> make_column(
+        name => 'description',
+        type => 'text',
+    );
+
+}
+
+1;

@@ -1,0 +1,53 @@
+                 --------------------------------
+                 Gestinanna::POF::Repository 0.01
+                 --------------------------------
+
+Gestinanna::POF::Repository manages a revision controlled data store 
+based on Gestinanna::POF::Alzabo.
+
+This package uses CVS as its model but with some differences:
+
+ o Objects may not be deleted
+
+ o If a revision greater than the currently modified one already 
+   exists, a branch is forced (e.g., if saving a modification to 
+   revision 1.2 and revision 1.3 already exists, then a branch is 
+   forced, creating a revision similar to 1.2.1.1 (or the first 
+   available branch number under 1.2) )
+
+ o This module does not track blame information -- blame tracking 
+   implementation is application-dependent
+
+ o An object may have multiple attributes under revision control
+
+
+To install Gestinanna::POF::Repository, download the distribution, 
+untar, and cd into the resulting directory.  There, run the following:
+
+  % perl Makefile.PL
+  % make
+  % make test
+  % make install
+
+or
+
+  % perl Build.PL
+  % ./Build
+  % ./Build test
+  % ./Build install
+
+Tests require the Alzabo package and DBD::SQLite as well as 
+Gestinanna::POF.
+
+All modules required for testing and use are available on CPAN.
+
+The author lurks on both the mod_perl list as well as various IRC channels.  
+Feel free to send questions there.
+
+
+Copyright (C) 2002-2003  Texas A&M University.  All Rights Reserved.
+
+This program is free software; you can redistribute it and/or modify it
+under the same terms as Perl itself.
+
+$Id: README,v 1.1 2003/06/17 20:10:51 jgsmith Exp $

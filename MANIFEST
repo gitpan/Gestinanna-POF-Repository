@@ -1,0 +1,20 @@
+Build.PL
+Changes
+MANIFEST			This list of files
+Makefile.PL
+META.yml
+README
+lib/Gestinanna/POF/Repository.pm
+lib/Gestinanna/POF/Repository/Description.pm
+lib/Gestinanna/POF/Repository/Object.pm
+lib/Gestinanna/POF/Repository/Tag.pm
+t/00basic.t
+t/10object.t
+t/20tag.t
+t/30description.t
+t/99pod.t
+t/lib/Alzabo/Driver/SQLite.pm
+t/lib/Alzabo/RDBMSRules/SQLite.pm
+t/lib/Alzabo/SQLMaker/SQLite.pm
+t/schema
+t/test-utils

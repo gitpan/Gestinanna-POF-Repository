@@ -1,0 +1,140 @@
+use Test::More;
+
+use lib 't/lib';
+
+require 't/schema';
+
+sub start_tests {
+    my($target, @modules) = @_;
+
+    my($module, $msg);
+
+    my @reasons_to_skip;
+    my @missing;
+
+    while(($module, $msg) = splice @modules, 0, 2) {
+        if(UNIVERSAL::isa($module, 'CODE')) {
+            eval { $module -> (); };
+            if($@) {
+                diag($@);
+                if(UNIVERSAL::isa($msg, 'CODE')) {
+                    eval { $msg = $msg -> (); };
+                    diag($@) if $@;
+                }
+                $msg =~ s{__TARGET__}{$target}g;
+                push @reasons_to_skip, $msg unless UNIVERSAL::isa($msg, 'CODE') || $msg eq '';
+            }
+        }
+        else {
+            $module = $target if $module eq '__TARGET__';
+            eval "require $module;";
+            if($@) {
+                diag($@);
+                if($msg) {
+                    $msg =~ s{__TARGET__}{$target}g;
+                    push @reasons_to_skip, $msg;   
+                }
+                else {
+                    push @missing, $module;
+                }
+            }  
+        }
+    }
+
+    if(@missing) {
+        $msg = "The following module";
+        $msg .= "s" if @missing > 1;
+        $msg .= " seem";  
+        $msg .= "s" unless @missing > 1;
+        $msg .= " to be missing but ";
+        $msg .= (@missing > 1 ? "are" : "is");
+        $msg .= " needed for testing: ";
+        if(@missing > 2) {
+            $msg .= join(", ", @missing[0..$#missing-1]) . ", and " . $missing[-1];
+        }
+        elsif(@missing == 2) {
+            $msg .= join(" and ", @missing);
+        }     
+        else {
+            $msg .= $missing[0];
+        }
+        $msg .= ".";
+        push @reasons_to_skip, $msg;
+    }
+}
+
+sub run_tests {
+    my $Tests = shift;
+
+    # go through and figure out how many tests we are actually running
+    my $num_tests;
+
+    foreach my $test (@$Tests) {
+        if(!UNIVERSAL::isa($test, 'ARRAY')) {
+            $num_tests ++;
+            next;
+        }
+        
+        if(defined($test->[0])) {
+            if(UNIVERSAL::isa($test->[0], 'CODE')) {
+                $num_tests += scalar(@$test);
+                $num_tests -- if @$test > 1 && UNIVERSAL::isa($test -> [1], 'SCALAR'); # replaces ok(!$e)
+            }
+            else {
+                $num_tests += $test->[0];
+                $num_tests += scalar(@$test) - 1; # no test of ok(!$e)
+                $num_tests -- if @$test > 2 && UNIVERSAL::isa($test -> [2], 'SCALAR'); # replaces ok(!$e)
+            }
+        }
+        else {
+            $num_tests += scalar(@$test) - 1;
+            $num_tests -- if @$test > 2 && UNIVERSAL::isa($test -> [2], 'SCALAR'); # replaces ok(!$e)
+        }
+    }
+
+    if($num_tests) { 
+        plan tests => $num_tests;
+    }
+    else {
+        plan skip_all => 'No tests are defined';
+        exit 0;
+    }   
+
+    my $testloc;
+    foreach my $test (@$Tests) {
+        if(!UNIVERSAL::isa($test, 'ARRAY')) {
+            eval { $test -> (); };
+            $e = $@;
+            diag($e) if $e;
+            ok(!$e);
+            next;
+        }
+
+        if(UNIVERSAL::isa($test -> [0], 'CODE')) {
+            eval { $test -> [0] -> () };
+            $e = $@;
+            $testloc = 1;
+        }
+        else {
+            eval { $test -> [1] -> () };
+            $e = $@;
+            $testloc = 2;
+        }
+
+        if($testloc < @$test && UNIVERSAL::isa($test->[$testloc], 'SCALAR')) {
+            diag($e) unless $e =~ m{$test->[$testloc]};
+            ok($e =~ m{$test->[$testloc]});
+            $testloc++;
+        }
+        else {
+            diag($e) if $e;
+            ok(!$e);
+        }
+        while($testloc < @$test) {
+            $test -> [$testloc++] -> ();
+        }
+    }
+}
+
+1;
+

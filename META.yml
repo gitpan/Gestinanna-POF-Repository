@@ -1,0 +1,27 @@
+--- #YAML:1.0
+name: Gestinanna-POF-Repository
+version: 0.01
+license: perl
+distribution_type: module
+requires:
+  Algorithm::Diff: 1.15
+  Alzabo: 0.67
+  Gestinanna::POF: 0.03
+recommends:
+  DBD::SQLite: 0
+build_requires: {}
+conflicts: {}
+provides:
+  Gestinanna::POF::Repository:
+    file: lib/Gestinanna/POF/Repository.pm
+    version: 0.01
+  Gestinanna::POF::Repository::Description:
+    file: lib/Gestinanna/POF/Repository/Description.pm
+    version: ~
+  Gestinanna::POF::Repository::Object:
+    file: lib/Gestinanna/POF/Repository/Object.pm
+    version: ~
+  Gestinanna::POF::Repository::Tag:
+    file: lib/Gestinanna/POF/Repository/Tag.pm
+    version: ~
+generated_by: Module::Build version 0.18
