@@ -7,7 +7,8 @@ my $m = Module::Build -> new(
     requires => {
         Algorithm::Diff => 1.15,
         Alzabo => 0.67,
-        Gestinanna::POF => 0.03,
+        Gestinanna::POF => 0.06,
+        Data::Serializer => 0,
     },
     recommends => {
         DBD::SQLite => 0,

@@ -36,7 +36,7 @@ sub load {
         my $t;
         foreach my $tag (@{$self -> {tag_path}}) {
             $t = $self -> new(
-                schema => $self -> {schema},
+                alzabo_schema => $self -> {alzabo_schema},
                 tag => $tag,
                 name => $self -> {name},
             );
@@ -64,7 +64,7 @@ sub tags {
     return unless $args{_factory};
     return unless $args{name};
 
-    my $table = $args{_factory} -> {schema} -> table($self -> table);
+    my $table = $args{_factory} -> {alzabo_schema} -> table($self -> table);
     my $cursor = $table -> rows_where(
         where => [
             [ $table -> column('name'), '=', $args{name} ],
@@ -81,7 +81,7 @@ sub tags {
 
     while($tag = $cursor -> next) {
         $t = $self -> new(
-            schema => $args{_factory} -> {schema},
+            alzabo_schema => $args{_factory} -> {alzabo_schema},
             tag => $tag -> tag,
             name => $tag -> name,
             revision => $tag -> revision,

@@ -7,24 +7,26 @@ sub create_repository {
         name => $table_name
     );
 
-    $object_table -> make_column(
-        name => (lc $table_name),
-        type => 'int',
-        primary_key => 1,
-        sequenced => 1,
-        nullable => 1,
-    );
+#    $object_table -> make_column(
+#        name => (lc $table_name),
+#        type => 'int',
+#        primary_key => 1,
+#        sequenced => 1,
+#        nullable => 1,
+#    );
 
     $object_table -> make_column(
         name => 'name',
         type => 'char',
         length => ID_LEN,
+        primary_key => 1,
     );
 
     $object_table -> make_column(
         name => 'revision',
         type => 'char',
         length => ID_LEN,
+        primary_key => 1,
     );
 
     $object_table -> make_column(
@@ -51,6 +53,7 @@ sub create_repository {
         name => 'name',
         type => 'char',
         length => ID_LEN,
+        primary_key => 1,
     );
 
     $tag_table -> make_column(

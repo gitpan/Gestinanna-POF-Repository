@@ -79,7 +79,7 @@ push @Tests, [ undef,
              ];
 
 push @Tests, [ undef,
-               sub { $factory = Gestinanna::POF -> new(_factory => ( schema => $schema ) ); },
+               sub { $factory = Gestinanna::POF -> new(_factory => ( alzabo_schema => $schema ) ); },
              ];
 
 push @Tests, [ undef,

@@ -89,6 +89,7 @@ $INC{'My/Rep/Foo.pm'} = 1;
 
 my $factory;
 my $object;
+my $repository;
 
 
 push @Tests, [ undef,
@@ -103,29 +104,72 @@ push @Tests, [ undef,
 
 push @Tests, [ undef,
                sub {
-                   # create a revision so we can create a tag
+                   # create a few objects and description entries
                    $object = $factory -> new(test_description => (object_id => '/test'));
 
                    $object -> description("Test Document");
                    $object -> save;
+
+                   $object = $factory -> new(test => ( object_id => '/test/foo' ));
+                   $object -> data("Foo");  $object -> log("Testing");
+                   $object -> save;
+
+                   $object = $factory -> new(test_description => ( object_id => '/foo/' ));
+                   $object -> description("Test folder");
+                   $object -> save;
+
+                   $object = $factory -> new(test_description => ( object_id => '/bar/this/that' ));
+                   $object -> description("Test folder");
+                   $object -> save;
+ 
+                   $object = $factory -> new(test => ( object_id => '/this/that/bar/foo' ));
+                   $object -> data("Bar");  $object -> log("Testing");
+                   $object -> save;
+
+#                   $object = $factory -> new(test => ( object_id => '/this/%/bar/foo' ));
+#                   $object -> data("Bar");  $object -> log("Testing");
+#                   $object -> save;
                },
              ];
 
 push @Tests, [ undef,
                sub {
-                   undef $object;
-                   $object = $factory -> new(test_description => (object_id => '/test'));
+                   $repository = $factory -> new('test_repository');
                },
-               sub { is($object && $object -> is_live, 1); },
-               sub { is($object && $object -> description, 'Test Document'); },
+               sub{ ok(defined $repository); },
+               sub{ ok(UNIVERSAL::isa($repository, 'Gestinanna::POF::Repository')); },
              ];
 
-push @Tests, [ undef,
-               sub {
-                   $object -> delete;
-               },
-               qr{Objects can not be deleted from a repository},
-             ];
+my %results = (
+    '/' => [ [ qw( bar foo test this ) ], [ qw( test ) ] ],
+    '/bar/' => [ [ qw( this ) ], [ ] ],
+    '/bar/this/' => [ [ ], [ qw( that ) ] ],
+    '/foo/' => [ [ ], [ ] ],
+    '/test/' => [ [ ], [ qw( foo ) ] ],
+    '/this/' => [ [ qw( that ) ], [ ] ],
+    '/this/that/' => [ [ qw( bar ) ] , [ ] ],
+    '/this/that/bar/' => [ [ ], [ qw( foo ) ] ],
+#    '/this/%/' => [ [ qw( bar ) ], [ ] ],
+);
+
+my($dirs, $files);
+
+foreach my $dir (keys %results) {
+    push @Tests, [ undef,
+                   sub {
+                       ($files, $dirs) = @{$repository -> listing($dir)}{qw(files folders)};
+                   },
+                   sub { is_deeply([ $dirs, $files ], $results{$dir}); },
+                 ];
+}
+              
+
+#push @Tests, [ undef,
+#               sub {
+#                   $object -> delete;
+#               },
+#               qr{Objects can not be deleted from a repository},
+#             ];
 
 #push @Tests, [ undef, # figure out how many later -- no tests run in the
 #                      # actual test code (otherwise, this is the number
@@ -186,7 +230,6 @@ foreach my $test (@Tests) {
     }
 }
 
-
 # clean up the schema - errors here are warnings, not failed tests
 
 eval {
@@ -199,7 +242,5 @@ exit 0;
 package My::Rep::Foo;
 
 use Gestinanna::POF::Repository qw(Foo);
-
-
 
 1;

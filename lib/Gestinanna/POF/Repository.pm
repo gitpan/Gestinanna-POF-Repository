@@ -8,12 +8,12 @@ use Gestinanna::POF::Repository::Description ();
 use base q(Class::Container);
 
 __PACKAGE__ -> valid_params(
-    schema =>  { isa => q(Alzabo::Runtime::Schema) },
+    alzabo_schema =>  { isa => q(Alzabo::Runtime::Schema) },
     _factory => { isa => 'Gestinanna::POF' },
 );
 
-our $VERSION = '0.01';
-our $REVISION = substr(q$Revision: 1.2 $, 10);
+our $VERSION = '0.03';
+our $REVISION = substr(q$Revision: 1.4 $, 10);
 
 use Carp;
 
@@ -26,6 +26,8 @@ sub import {
     if(@_) {
         my $rep = shift;
         my $lcrep = lc $rep;
+
+        my %params = @_;
 
         my $package = caller;
 
@@ -50,7 +52,7 @@ use constant repository_key => qq{\Q$lcrep\E};
         foreach my $subclass (keys %classes) {
 
 
-            eval "require " . $classes{$subclass} . ";";
+            eval "require $classes{$subclass};";
             #warn "require $classes{$subclass} failed: $@\n" if $@;
 
             my $base_class = qq{${class}::${subclass}};
@@ -68,10 +70,13 @@ use constant repository_key => qq{\Q$lcrep\E};
             $inc_entry .= ".pm";
 
             $INC{$inc_entry} = $inc_entry unless exists $INC{$inc_entry};  # trick Class::Factory into thinking it's already loaded
+            my $base_classes = join("\n    ", @{$params{lc($subclass)."_classes"}||[]}, $base_class);
 
             my $code = <<1HERE1;
 package $classes{$subclass};
-use base qw($base_class);
+use base qw(
+    $base_classes
+);
 
 \$${classes{$subclass}}::VERSION = $class -> VERSION;
 
@@ -145,27 +150,33 @@ sub listing {
 
     # return a list of files and directories
     # returns [ @files ], [ @directories ]
-    return if $path =~ m{%};
+    $path = '' unless defined $path;
+    return { files => [], folders => [] } if $path =~ m{%};
     my $prefix = "/".$path . "/";
     $prefix =~ s{/+}{/}g;
     $prefix = qr{\Q$prefix\E};
     #warn "prefix: $prefix\n";
     $path = "/$path";
     $path =~ s{/+}{/};
+    $path =~ s{\\}{\\\\}g;
     $path =~ s{_}{\\_};
+    $path =~ s{%}{\\%}g;
     $path .= "%";
     #warn "path: [$path]\n";
 
-    my $desc_table = $self -> {schema} -> table($self -> repository . "_Description");
-    my $obj_table = $self -> {schema} -> table($self -> repository);
+    my $desc_table = $self -> {alzabo_schema} -> table($self -> repository . "_Description");
+    my $obj_table = $self -> {alzabo_schema} -> table($self -> repository);
 
     my(%objects);
     my($name, $obj);
+
 
     my @res = $obj_table -> function(
         select => [ 'DISTINCT(name)' ],
         where => [
             [ $obj_table -> column('name'), 'LIKE', $path  ],
+#              'and',
+#            [ $obj_table -> column('name'), 'NOT LIKE', $path . "/%" ],
         ],
     );
 
@@ -175,10 +186,26 @@ sub listing {
         select => [ 'DISTINCT(name)' ],
         where => [
             [ $desc_table -> column('name'), 'LIKE', $path  ],
+#              'and',
+#            [ $desc_table -> column('name'), 'NOT LIKE', $path . "/%" ],
         ],
     );
 
     @objects{(map { (s{^$prefix}{} => $_)[1] } (@res))} = (undef);
+
+    # now do the same with the Folder table, if it exists
+    if($self -> {alzabo_schema} -> has_table('Folder')) {
+        $desc_table = $self -> {alzabo_schema} -> table('Folder');
+        my @res = $desc_table -> function(
+            select => [ 'DISTINCT(name)' ],
+            where => [
+                [ $desc_table -> column('name'), 'LIKE', $path  ],
+#              'and',
+#            [ $desc_table -> column('name'), 'NOT LIKE', $path . "/%" ],
+            ],
+        );
+        @objects{(map { (s{^$prefix}{} => $_)[1] . '/' } (@res))} = (undef);
+    }
 
     my @dirs = sort 
                keys %{ +{
@@ -198,7 +225,9 @@ sub listing {
                          )
                       }  };
 
-    return(\@files, \@dirs);
+
+
+    return { files => \@files, folders => \@dirs };
 }
 
 1;
@@ -223,7 +252,7 @@ Using the above repository:
  My::Files -> register_factory_types($factory => file);
 
  my $factory = Factory -> new(_factory => (
-     schema => $alzabo_schema,
+     alzabo_schema => $alzabo_schema,
      tag_path => [ qw(list of tags) ],
  ) );
 

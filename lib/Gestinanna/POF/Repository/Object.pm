@@ -9,7 +9,7 @@ use base qw(Gestinanna::POF::Alzabo);
 use Algorithm::Diff;
 use Data::Serializer;
 use Params::Validate qw(:types);
-use Carp;
+#use version;
 
 __PACKAGE__ -> valid_params (
     tag_path   => { type => ARRAYREF, optional => 1},
@@ -18,11 +18,32 @@ __PACKAGE__ -> valid_params (
 
 sub _encode_rev {
     shift;
-    return pack("U*", @_);
+    #main::diag("Encoding : " . join(".", @_));
+    #return version -> new(join(".", @_)) if @_ % 2 == 0;
+    return join(".", @_);
 }
 
 sub _decode_rev {
-    return unpack("U*", $_[1]);
+    #main::diag("Decoding : $_[1]");
+    return unless defined $_[1];
+    return split(/\./, "" . $_[1]);
+}
+
+sub version_cmp {
+    #my $a = ref($_[0]) ? $_[0] : split(/\./, $_[0]);
+    #my $b = ref($_[1]) ? $_[1] : split(/\./, $_[1]);
+    my($a, $b) = @_[0,1];
+
+    my($i, $r);
+
+    for($i = 0; $i < @$a && $i < @$b; $i++) {
+        next unless $r = $a -> [$i] <=> $b -> [$i];
+        return $r;
+    }
+
+    return 1 if @$b < @$a;
+    return -1 if @$a < @$b;
+    return 0;
 }
 
 sub table { $_[0] -> repository };
@@ -42,7 +63,9 @@ sub log {
 sub data_columns {
     my $self = shift;
     return $self -> {_data_columns} if $self -> {_data_columns};
-    my $table = $self -> {schema} -> table($self -> table);
+    #main::diag "Schema: $$self{alzabo_schema}\n";
+    return [ ] unless defined $self -> {alzabo_schema};
+    my $table = $self -> {alzabo_schema} -> table($self -> table);
     $self -> {_data_columns} =
         [ grep { $_ =~ m{^data(_.*)?$} } map { $_ -> name } grep { $_ -> is_blob } $table -> columns ];
 }
@@ -51,6 +74,7 @@ sub data_columns {
 # -- not does this revision already exist
 sub is_live {
     my $self = shift;
+    #main::diag("is_live: _row: " . ($self -> {_row} && $self -> {_row} -> is_live) . " _prev_row: " . ($self -> {_prev_row} && $self -> {_prev_row} -> is_live));
     return 1 if $self -> {_row}      && $self -> {_row}      -> is_live
              || $self -> {_prev_row} && $self -> {_prev_row} -> is_live;
     return 0;
@@ -62,16 +86,26 @@ sub tags {
     return $self -> tag_class -> tags(%$self);
 }
 
-sub load {
-    my $self = shift;
+sub process_object_id {
+    my($self, $objectid, %params) = @_;
 
-    if(defined $self -> {object_id}) {
-        $self -> {name} = $self -> {object_id};
-        delete $self -> {object_id};
+    #main::diag("$self -> process_object_id($objectid, ...)");
+    #warn("$self -> process_object_id($objectid, ...)\n");
+
+    $self -> SUPER::process_object_id($objectid, %params);
+
+    #if(!$self -> SUPER::process_object_id($objectid, %params)) {
+    if(!defined $self -> {name}) {
+        ##main::diag("SUPER::process_object_id returned <false>");
+        return 0 if $objectid =~ m{=};
+
+        #warn("Setting self->{name} to $objectid");
+        $self -> {name} = $objectid;
     }
+    #warn("self -> {name}: $$self{name}");
 
-    if(!defined $self -> {revision}) {
-        my $t;
+    if(!exists $self -> {revision} || !defined $self -> {revision}) {
+        my $t;        
         if(defined $self -> {tag_path}) {
             # find a revision based on tag
             #my $class = $self -> tag_class; #(ref $self || $self) . "::Tag";
@@ -81,7 +115,7 @@ sub load {
                 #warn "Looking at tag [$tag]\n";
                 $t = $self -> {_factory} -> new ( $tag_type => (
                       tag => $tag,
-                      object_id => $self -> name,
+                      object_id => $self -> {name},
                 ));
                 last if $t -> is_live;
             }
@@ -90,14 +124,63 @@ sub load {
             $self -> {revision} = $t -> revision;
         }
         else {
-            my @revisions = sort { $a cmp $b } $self -> revisions;
+            #my @revisions = sort { $a cmp $b } $self -> revisions;
+            my @revisions = map { join(".", @$_) } sort { version_cmp($a, $b) } map { [ split /\./ ] } $self -> revisions;
+            #main::diag("Revisions: " . join("; ", @revisions));
             $self -> {revision} = pop @revisions if @revisions;
         }
     }
 
+    #warn("self -> {name}: $$self{name}");
+    return 1 if exists $self -> {revision} && defined $self -> {revision};
+    return 0;
+}
+
+sub make_accessor {
+    my $self = shift;
+    my $field = shift;
+
+    my %data_columns = map { $_ => undef } @{$self -> data_columns};
+    #my($field) = $AUTOLOAD =~ /::([^:]+)$/;
+    #my $super_field = "SUPER::$field";
+    #Carp::cluck("Looking at $field: " . join(", ", keys %data_columns));
+    #main::diag("Caller: ", join("; ", caller));
+    my $super_accessor = $self -> SUPER::make_accessor($field);
+
+    return $super_accessor unless exists $data_columns{$field};
+
+    #return sub {
+    ##    $_[0] -> post_load if @_ > 1; # on modification
+    #    goto &$super_accessor;
+    #} unless exists $data_columns{$field};
+
+    return sub {
+        $_[0] -> post_load; # on reading or modification
+        goto &$super_accessor;
+    };
+}
+
+use Data::Dumper;
+sub load {
+    my $self = shift;
+
+    #main::diag "Before load: " . Data::Dumper -> Dump([$self]);
+
     $self -> SUPER::load unless $self -> {_row};
 
-    #warn "Revision (after SUPER::load): ", join(".", $self -> _decode_rev($self -> revision)), "\n";
+    #delete $self -> {_prev_row};
+}
+
+sub post_load {
+    my $self = shift;
+
+    return if $self -> {_prev_row};
+
+# we want to delay the next bit until we need it
+    #main::diag("$self -> post_load");
+    #main::diag "After load: " . Data::Dumper -> Dump([$self]);
+
+    #main::diag "Revision (after SUPER::load): " . $self -> {revision};
 
     if($self -> {_row} && $self -> {_row} -> is_live) {
         # this will create a new entry in the RDBMS when it is saved
@@ -105,7 +188,7 @@ sub load {
                 = $self -> {_row};
 
         eval {
-            $self -> {_row} = $self -> {schema} -> table($self -> table) -> potential_row(
+            $self -> {_row} = $self -> {alzabo_schema} -> table($self -> table) -> potential_row(
                 values => {
                     name => $self -> name,
                     revision => $row -> select('revision'),
@@ -121,15 +204,23 @@ sub load {
         # patches
 
 
-        my $table = $self -> {schema} -> table($self -> table);
+        my $table = $self -> {alzabo_schema} -> table($self -> table);
         my $name_col = $table -> column('name');
         my $rev_col  = $table -> column('revision');
-        my $branch = substr($target_rev, 0, -1);
+        #my $branch = substr($target_rev, 0, -1);
+        my @bits = $self -> _decode_rev($target_rev);
+        my $branch = $self -> _encode_rev(@bits[0..$#bits-1]);
 
         my %revisions = %{$self -> revisions_hash($branch)};
-        my @revs = sort { $a cmp $b } keys %revisions;
+        #my @revs = sort { $a cmp $b } keys %revisions;
+        my @revs = map { join(".", @$_) } 
+                   sort { version_cmp($a, $b) } 
+                   grep { version_cmp($_, \@bits) <= 0 } 
+                   map { [ split /\./ ] } 
+                   keys %revisions;
 
-        my $x01 = $self -> _encode_rev(1);
+        #warn("Keys to \%revisions: " . join(", ", keys %revisions) . "\n");
+        #warn("Revisions: " . join(", ", @revs) . "\n");
 
         my @columns = @{$self -> data_columns};
         #warn "Data columns: ", join(", ", @columns), "\n";
@@ -156,9 +247,13 @@ sub load {
 
     #warn "data: ", Data::Dumper -> Dump([ [ @{$self}{@columns} ] ]);
 
-    #warn "revision: ", join(".", $self -> _decode_rev($self -> revision)), "\n";
+    #main::diag "revision: ". $self -> revision;
     #warn "load finished\n";
 }
+
+#sub get_revision { return version -> new($_[0] -> {revision}); }
+
+#sub set_revision { $_[0] -> {revision} = "" . $_[1]; }
 
 sub save {
     # we create a new revision and save the diff
@@ -168,17 +263,33 @@ sub save {
 # we probably want to lock on $self -> name  before going through with this
     my $self = shift;
 
+#    warn "Entering ", __PACKAGE__, "::save for $self\n";
+
     croak "Must set a log message before saving" unless $self -> {_added_log_message};
 
-    my $target_rev = $self -> revision;
-    my $branch = substr($target_rev, 0, -1);
+    #return unless $self -> {_prev_row}; # no change made to revision-controlled data
+    $self -> post_load;
 
-    my $table = $self -> {schema} -> table($self -> table);
+    #unless($self -> {_prev_row}) {
+    #    $self -> post_load;
+    #}
+
+    my @columns = @{$self -> data_columns};
+    my %data;
+    @data{@columns} = @$self{@columns};
+
+#    $self -> post_load;
+
+    my $target_rev = $self -> {revision};
+    my @target_rev_a = $self -> _decode_rev($target_rev);
+    my $branch = $self -> _encode_rev(@target_rev_a[0..$#target_rev_a-1]);
+
+    #main::diag("bits: <" . join("><", @bits) . ">");
+    #main::diag("target rev: $target_rev; branch: $branch\n");
+
+    my $table = $self -> {alzabo_schema} -> table($self -> table);
     my $name_col = $table -> column('name');
     my $rev_col  = $table -> column('revision');
-
-    #main::diag "Branch: ". join(".", $self -> _decode_rev($branch));
-    #main::diag "target rev: ". join(".", $self -> _decode_rev($target_rev));
 
     unless($self -> {_merge} || $self -> {_branch}) {
         # we have the next revision in our current branch
@@ -186,12 +297,10 @@ sub save {
         my @revs = $self -> revisions($branch);
 
         #main::diag "Revs: ". join(", ", map { join(".", $self -> _decode_rev($_)) } @revs);
-        $self -> {_branch} = 1 if $revs[0] gt $target_rev;
+        #$self -> {_branch} = 1 if $revs[0] gt $target_rev;
+        $self -> {_branch} = 1 if defined $revs[0] && version_cmp([split(/\./, $revs[0])], \@target_rev_a) > 0;
     }
 
-    my @columns = @{$self -> data_columns};
-    my %data;
-    @data{@columns} = @$self{@columns};
 
    #use Data::Dumper;
     #warn Data::Dumper -> Dump([\%data]);
@@ -205,14 +314,16 @@ sub save {
         my @revs = $self -> revisions($new_rev);
 
         #warn "Found ", scalar(@revs), " revisions\n";
-        $new_rev .= $self -> _encode_rev(($self -> _decode_rev($revs[0]))[-2] + 1, 1);
+        $new_rev .= '.' . $self -> _encode_rev(($self -> _decode_rev($revs[0]))[-2] + 1, 1);
+        #main::diag "Moving from $revs[0] to $new_rev\n";
         $self -> {revision} = $new_rev;
         # no diffs for the first entry in a branch
     }
     else {
-        if(length($target_rev)) {
-            $self -> {revision} = $branch . $self -> _encode_rev($self -> _decode_rev(substr($target_rev, -1))+1);
-            #warn "New revision: ", join(".", $self -> _decode_rev($self -> {revision})), "\n";
+        if(defined $target_rev && length($target_rev)) {
+            my @bits = $self -> _decode_rev($target_rev);
+            $self -> {revision} = $branch . "." . ($bits[$#bits] + 1);
+            #$self -> {revision} = $branch . $self -> _encode_rev($self -> _decode_rev($target_rev))+1);
             # we also need to construct diffs
             #warn "Data columns: ", join(" ", @columns), "\n";
             # TODO: optimize $obj out (perhaps)
@@ -234,7 +345,7 @@ sub save {
         }
         else {
             #main::diag "Creating new object";
-            $self -> {revision} = v1.1;  # new object
+            $self -> {revision} = "1.1";  # new object
         }
     }
 
@@ -242,6 +353,9 @@ sub save {
 
     eval {
         #main::diag "_row ref before save: " . ref($self -> {_row});
+        #main::diag "  revision: $$self{revision}\n";
+        $self -> {modify_timestamp} = undef;
+
         $self -> SUPER::save;
 
         #main::diag "_row ref after save: " . ref($self -> {_row});
@@ -249,10 +363,10 @@ sub save {
         if($self -> {_row} && $self -> {_row} -> is_live) {
             $self -> {_prev_row} = $self -> {_row};
 
-            $self -> {_row} = $self -> {schema} -> table($self -> table) -> potential_row(
+            $self -> {_row} = $self -> {alzabo_schema} -> table($self -> table) -> potential_row(
                 values => {
-                    name => $self -> name,
-                    revision => $self -> revision,
+                    name => $self -> {name},
+                    revision => $self -> {revision},
                 },
             );
 
@@ -271,36 +385,48 @@ sub save {
 
     if($e) {
         croak $e;
+        return 0;
     }
     else {
         delete $self -> {_added_log_message};
     }
+
+    #warn "Returning 1 from ", __PACKAGE__, "::save for $self\n";
+    return 1;
 }
 
 sub revisions {
     my($self, $min, $max) = @_;
 
-    my $table = $self -> {schema} -> table($self -> table);
+    return unless $self -> {name};  # no name, no revisions
+
+    my $table = $self -> {alzabo_schema} -> table($self -> table);
     my $name_col = $table -> column('name');
     my $rev_col  = $table -> column('revision');
     my $branch;
 
-    if(length($min) % 2 == 1) {
+#    warn "revisions($min, $max)\n";
+
+    if(defined $min && length($min) % 2 == 1) {
         $branch = $min;
-        $min = pack("U*", 1);
+        $min = "1"; #pack("U*", 1);
         $max = undef;
     }
     else {
-        $max = $self -> revision unless defined $max;
-        $branch = substr($max, 0, -1);
+        $max = $self -> {revision} unless defined $max;
+        my @bits = $self -> _decode_rev($max);
+        $branch = $self -> _encode_rev(@bits[0..$#bits-1]);
+        $max = $bits[$#bits] if @bits > 1;
         if(defined $min) {
-            $min = substr($min, -1) if length($min) > 1;
+            @bits = $self -> _decode_rev($min);
+            $min = $bits[$#bits] if @bits > 1;
         }
         else {
-            $min = pack("U*", 1);
+            $min = '1';
         }
-        $max = substr($max, -1) if length($max) > 1;
     }
+
+    #main::diag("$self -> revisions($min, $max)");
 
     my $rev;
     my @revs;
@@ -313,40 +439,43 @@ sub revisions {
 #            ],
 #        );
 #        while(my $rev = $revs -> next) {
-#            main::diag __LINE__ . ": Found " . join(".", $self -> _decode_rev($rev -> select('revision')));
+#            #main::diag __LINE__ . ": Found " . join(".", $self -> _decode_rev($rev -> select('revision')));
 #            push @revs, $rev -> select('revision');
 #        }
         if(defined $max) {
             foreach my $r ( $min .. $max ) {
+                #main::diag("Looking at $branch.$r");
                 eval {
                     $rev = $table -> one_row(
                         where => [
-                            [ $name_col, '=', $self -> name ],
-                            [ $rev_col, '=', $branch . $r ],
+                            [ $name_col, '=', $self -> {name} ],
+                            [ $rev_col, '=', $branch . ".$r" ],
                         ],
                     );
                 };
+                #push @revs, version -> new($branch . $r) unless $@;
                 push @revs, $branch . $r unless $@;
             }
         }
         else {
-            my $r = unpack("U*", $min);
+            my $r = $min;
             eval {
                 $rev = $table -> one_row(
                     where => [
-                        [ $name_col, '=', $self -> name ],
-                        [ $rev_col, '=', $branch . pack("U*", $r) ],
+                        [ $name_col, '=', $self -> {name} ],
+                        [ $rev_col, '=', $branch . ".$r" ],
                     ],
                 );
             };
             while($rev && !$@) {
-                push @revs, $branch . pack("U*", $r);
+                #main::diag("Looking at $branch.$r");
+                push @revs, $branch . ".$r";
                 $r++;
                 eval {
                     $rev = $table -> one_row(
                         where => [
-                            [ $name_col, '=', $self -> name ],
-                            [ $rev_col, '=', $branch . pack("U*", $r) ],
+                            [ $name_col, '=', $self -> {name} ],
+                            [ $rev_col, '=', $branch . ".$r" ],
                         ],
                     );
                 };
@@ -356,24 +485,26 @@ sub revisions {
     else {
         my $revs = $table -> rows_where(
             where => [
-                [ $name_col, '=', $self -> name ],
+                [ $name_col, '=', $self -> {name} ],
             ],
         );
         while(my $rev = $revs -> next) {
             my $r = $rev -> select('revision');
-            next unless length($r) == 2;
+            #main::diag("Looking at $r");
+            next unless $r =~ tr[.][.] == 1; # one dot, two parts
             #main::diag __LINE__ . ": Found " . join(".", $self -> _decode_rev($r));
             push @revs, $r;
         }
     }
 
-    sort { $b cmp $a } keys %{ +{ map { $_ => undef } @revs } };
+    #sort { $b cmp $a } keys %{ +{ map { $_ => undef } @revs } };
+    map { join(".", @$_) } sort { version_cmp($b, $a) } map { [ split /\./ ] } keys %{ +{ map { $_ => undef } @revs } };
 }
 
 sub revisions_hash {
     my($self, $branch) = @_;
 
-    my $table = $self -> {schema} -> table($self -> table);
+    my $table = $self -> {alzabo_schema} -> table($self -> table);
     my $name_col = $table -> column('name');
     my $rev_col  = $table -> column('revision');
 
@@ -381,31 +512,20 @@ sub revisions_hash {
     my %revs;
 
     if(defined $branch) {
-#        $revs = $table -> rows_where(
-#            where => [
-#                [ $name_col, '=', $self -> name ],
-#                [ $rev_col, 'LIKE', $self -> escape_sql_meta($branch) . ('_' x (2 - length($branch)%2)) ],
-#            ],
-#        );
-#        while(my $rev = $revs -> next) {
-#            main::diag "Found " . join(".", $self -> _decode_rev($rev -> select('revision')));
-#            push @revs, $rev -> select('revision');
-#        }
-        unless(keys %revs) {
-            my $length = length($branch) + (2 - length($branch)%2); # desired length
-            #main::diag(__LINE__ . ": No revs found, trying for those with length $length");
+        my $length = 1 + ($branch =~ tr[.][.]) + ($branch =~ tr[.][.])%2; # desired length (in dots)
 
-            $revs = $table -> rows_where(
-                where => [
-                    [ $name_col, '=', $self -> name ],
-                ],
-            );
-            while(my $rev = $revs -> next) {
-                my $r = $rev -> select('revision');
-                #main::diag __LINE__ . ": Found " . join(".", $self -> _decode_rev($r));
-                next unless length($r) == $length;
-                $revs{$r} = $rev;
-            }
+        $revs = $table -> rows_where(
+            where => [
+                [ $name_col, '=', $self -> name ],
+                [ $rev_col, 'LIKE', "$branch.%" ],
+            ],
+        );
+        while(my $rev = $revs -> next) {
+            my $r = $rev -> select('revision');
+            #main::diag __LINE__ . ": Found " . join(".", $self -> _decode_rev($r));
+            #main::diag("Looking at rev $r in branch $branch (length $length)");
+            next unless $length == ($r =~ tr[.][.]);
+            $revs{$r} = $rev;
         }
     }
     else {
@@ -416,7 +536,7 @@ sub revisions_hash {
         );
         while(my $rev = $revs -> next) {
             my $r = $rev -> select('revision');
-            next unless length($r) == 2;
+            next unless 1 == $r =~ tr[.][.];
             #main::diag __LINE__ . ": Found " . join(".", $self -> _decode_rev($r));
             $revs{$r} = $rev;
         }
@@ -479,27 +599,10 @@ sub apply_diff {
         next unless defined $diff;
         $diff = $self -> _thaw($diff);
         #warn "Diff: ", Data::Dumper -> Dump([$diff]);
+        #my $offset = 0;
+        #my $hunk_offset;
         foreach my $hunk (@{$diff}) {
-            foreach my $op (@{$hunk}) {
-                if($op->[0] eq '-') {
-                    # sometimes it'll get off by one - not sure why yet
-                    if($self -> {$col} -> [$op->[1]] ne $op->[2]) {
-                        $op->[1]++ while($op->[1] < @{$self -> {$col}} && $self -> {$col} -> [$op->[1]] ne $op->[2]);
-                    }
-                    if($self -> {$col} -> [$op->[1]] ne $op->[2]) {
-                        $op->[1]-- while($op->[1] > -1 && $self -> {$col} -> [$op->[1]] ne $op->[2]);
-                    }
-                    if($self -> {$col} -> [$op->[1]] ne $op->[2]) {
-                        # may want to try and put some context in the diff somehow ($op -> [3] ?)
-                        carp "Unable to find [", $op->[2], "]\n";
-                        next;
-                    }
-                    splice @{$self -> {$col}},  $op->[1], 1;
-                }
-                else {
-                    splice @{$self -> {$col}}, $op->[1], 0, $op -> [2];
-                }
-            }
+            splice @{$self -> {$col}}, $hunk -> [0], $hunk -> [1], @{$hunk}[2 .. $#{$hunk}];
         }
     }
 
@@ -524,12 +627,24 @@ sub create_diff {
             [ split(/\n/, $obj ->{$col}) ],   # previous version
             [ split(/\n/, $obj2 -> {$col}) ] # current version
         );
+        my @splices;
+        my $pos_difference = 0;
         foreach my $hunk (@{$diff}) {
-            @{$hunk} = sort { $b->[0] cmp $a->[0] || $a->[1] <=> $b->[1] } @{$hunk};
+            my @pos = grep { $_ -> [0] eq '+' } @{$hunk};
+            my @neg = grep { $_ -> [0] eq '-' } @{$hunk};
+            my $being_replaced = scalar(@neg);
+            my @replacing = map { $_ -> [2] } @pos;
+            my $position = @pos ? ($pos[0] -> [1])
+                                : ($neg[0] -> [1] + $pos_difference);
+            $pos_difference += scalar(@pos) - $being_replaced;
+            push @splices, [ $position, $being_replaced, @replacing ];
         }
+        #foreach my $hunk (@{$diff}) {
+        #    @{$hunk} = sort { $b->[0] cmp $a->[0] || $a->[1] <=> $b->[1] } @{$hunk};
+        #}
         #warn "There are ", scalar(@{$diff}), " hunks\n";
-        if(0 != @{$diff}) {
-            $diffs -> {$col} = $self -> _freeze($diff);
+        if(0 != @splices) {
+            $diffs -> {$col} = $self -> _freeze(\@splices);
         }
         else {
             $diffs -> {$col} = undef;

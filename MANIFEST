@@ -12,6 +12,7 @@ t/00basic.t
 t/10object.t
 t/20tag.t
 t/30description.t
+t/40repository.t
 t/99pod.t
 t/lib/Alzabo/Driver/SQLite.pm
 t/lib/Alzabo/RDBMSRules/SQLite.pm

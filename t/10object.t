@@ -13,19 +13,19 @@ my $schema;
 my $schema_name = 'gst_pof_test_alzabo_schema';
 
 start_tests(
-    Gestinanna::POF::Repository => (
-        Alzabo::Create => undef,
-        Alzabo::Runtime => undef,
+    'Gestinanna::POF::Repository' => (
+        'Alzabo::Create' => undef,
+        'Alzabo::Runtime' => undef,
 
-        Gestinanna::POF => undef,
-        Gestinanna::POF::Alzabo => undef,
+        'Gestinanna::POF' => undef,
+        'Gestinanna::POF::Alzabo' => undef,
 
         __TARGET__ => 'Unable to load __TARGET__ for testing',
 
         DBI => undef,
-        DBD::SQLite => undef,
+        'DBD::SQLite' => undef,
 
-        Alzabo::Driver::SQLite => 'Alzabo must support SQLite in order to test __TARGET__',
+        'Alzabo::Driver::SQLite' => 'Alzabo must support SQLite in order to test __TARGET__',
     
         sub {
             $create_schema = Alzabo::Create::Schema -> new(
@@ -66,15 +66,15 @@ my $factory;
 $INC{'My/Rep/Foo.pm'} = 1;
 
 push @Tests,
-    sub { My::Rep::Foo -> register_factory_types(Gestinanna::POF => 'test'); },
+    sub { My::Rep::Foo -> register_factory_types('Gestinanna::POF' => 'test'); },
       
-    [ sub { $factory = Gestinanna::POF -> new(_factory => ( schema => $schema ) ); },
+    [ sub { $factory = Gestinanna::POF -> new(_factory => ( alzabo_schema => $schema ) ); },
       sub { ok(defined $factory); }, #diag("Factory: $factory") },
     ],
 
     run_api_tests(\$factory, '/test', 'data'),
 
-    run_api_tests(\$factory, '/second-test', 'data'),
+    #run_api_tests(\$factory, '/second-test', 'data'),
 
     ;
 
@@ -103,9 +103,10 @@ sub run_api_tests {
     my $object_is_live = [ sub { $t = $object -> is_live; }, sub { is($t, 1, "Object is live"); } ];
     my $load_object = [ 
         sub { 
-            undef $object; 
+            $object = undef;
             #main::diag("Factory: $$factory;  object_id: $object_id"); 
             $object = $$factory -> new(test => (object_id => $object_id)); 
+            #main::diag("Loaded $object");
         },
         sub { ok(defined $object, "Loaded object is defined"); },
     ];
@@ -115,6 +116,7 @@ sub run_api_tests {
 
         [ sub { $t = $object -> is_live; },
           sub { is($t, 0, "Object is not live") },
+          sub { is(defined($object -> {alzabo_schema}), 1, "Alzabo schema is defined in object") },
         ],
 
         sub { $object -> $field('other'); },
@@ -130,6 +132,8 @@ sub run_api_tests {
         $log_msg,
 
         $save_object,
+
+#( 0 ? (
 
         $object_is_live,
 
@@ -209,7 +213,7 @@ sub run_api_tests {
 
         $load_object,
 
-        [ sub { $t = join(".", unpack("U*", $object -> revision)); },
+        [ sub { $t = $object -> revision; },
           sub { is($t, "1.4"); },
         ],
 
@@ -217,6 +221,79 @@ sub run_api_tests {
           sub { is($t, 'bar'); },
         ],
 
+        [ sub {
+            $object = undef;
+            #main::diag("Factory: $$factory;  object_id: $object_id");
+            $object = $$factory -> new(test => (object_id => "name=$object_id, revision=1.1"));
+            #main::diag("Loaded $object");
+          },
+          sub { is($object -> revision, '1.1'); },
+          sub { is($object -> $field, 'other'); },
+        ],
+
+        $load_object,
+
+        [ sub { for(my $i = 5; $i < 100; $i++) { 
+                    main::diag(" ... $i") if $i % 10 == 0; 
+                    $object -> $field("$i"); 
+                    $object -> log("test $i"); 
+                    $object -> save; 
+                } 
+              },
+          sub { is($object -> revision, "1.99"); },
+        ],
+
+        $load_object,
+
+        sub { $object -> $field("This\nis\nmulti\nline\ntext"); },
+
+        $log_msg,
+
+        $save_object,
+
+
+        $load_object,
+
+        [ sub { $t = $object -> $field },
+          sub { is($t, "This\nis\nmulti\nline\ntext"); },
+        ],
+
+        sub { $object -> $field("This\nis\nsome\nother\ntext"); },
+
+        $log_msg,
+
+        $save_object,
+#) : ( ) ),
+
+        $load_object,
+
+        [ sub { $t = $object -> $field },
+          sub { is($t, "This\nis\nsome\nother\ntext"); },
+        ],
+
+        sub { $object -> $field("This\nis\nsome\nlong\nlist\nof\nthings"); },
+
+        $log_msg,
+
+        $save_object,
+
+        $load_object,
+
+        [ sub { $t = $object -> $field },
+          sub { is($t, "This\nis\nsome\nlong\nlist\nof\nthings"); },
+        ],
+
+        sub { $object -> $field("This\nlong\nlist\nof\nis\nsome\nthings"); },
+
+        $log_msg,
+
+        $save_object,
+
+        $load_object,
+
+        [ sub { $t = $object -> $field },
+          sub { is($t, "This\nlong\nlist\nof\nis\nsome\nthings"); },
+        ],
     );
 }
 

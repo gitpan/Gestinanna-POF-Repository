@@ -1,5 +1,5 @@
                  --------------------------------
-                 Gestinanna::POF::Repository 0.01
+                 Gestinanna::POF::Repository 0.03
                  --------------------------------
 
 Gestinanna::POF::Repository manages a revision controlled data store 
@@ -44,10 +44,14 @@ All modules required for testing and use are available on CPAN.
 The author lurks on both the mod_perl list as well as various IRC channels.  
 Feel free to send questions there.
 
+N.B.: The manner in which differences are tracked has changed.  You 
+will need to reload any documents you stored using an older version of 
+this module.  This will only happen again if there are major bugs 
+whose fix requires a different data structure.
 
-Copyright (C) 2002-2003  Texas A&M University.  All Rights Reserved.
+Copyright (C) 2002-2004  Texas A&M University.  All Rights Reserved.
 
 This program is free software; you can redistribute it and/or modify it
 under the same terms as Perl itself.
 
-$Id: README,v 1.1 2003/06/17 20:10:51 jgsmith Exp $
+$Id: README,v 1.2 2004/02/24 16:26:57 jgsmith Exp $
