@@ -1,5 +1,6 @@
 use Test::More;
 
+require "t/test-utils";
 require "t/schema";
 
 local($SIG{__WARN__});
@@ -196,10 +197,16 @@ eval {
 
 exit 0;
 
-package My::Rep::Foo;
+BEGIN {
+    use Gestinanna::POF::Repository;
+                
+Gestinanna::POF::Repository -> build_object_class(
+    class => 'My::Rep::Foo',
+    params => {
+        repository => 'Foo',
+    },
+);
 
-use Gestinanna::POF::Repository qw(Foo);
-
-
+}
 
 1;

@@ -3,23 +3,11 @@ use Test::More;
 # do things load?
 
 my @classes = qw(
-    Gestinanna::POF
-    Gestinanna::POF::Base
-    Gestinanna::POF::Container
-    Gestinanna::POF::LDAP
+    Gestinanna::POF::Repository
+    Gestinanna::POF::Repository::Object
+    Gestinanna::POF::Repository::Tag
+    Gestinanna::POF::Repository::Description
 );
-
-eval {
-    require Alzabo;
-};
-
-push @classes, 'Gestinanna::POF::Alzabo' unless $@;
-
-eval {
-    require MLDBM;
-};
-
-push @classes, 'Gestinanna::POF::MLDBM' unless $@;
 
 plan tests => scalar(@classes);
 

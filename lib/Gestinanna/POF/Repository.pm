@@ -12,18 +12,60 @@ __PACKAGE__ -> valid_params(
     _factory => { isa => 'Gestinanna::POF' },
 );
 
-our $VERSION = '0.03';
-our $REVISION = substr(q$Revision: 1.4 $, 10);
+our $VERSION = '0.04';
+our $REVISION = substr(q$Revision: 1.6 $, 10);
+
+our $RESOURCE = 'alzabo_schema';
+
+our @XML_ATTRIBUTES = qw(
+    resource
+    repository
+);
 
 use Carp;
 
 use strict;
 no strict 'refs';
 
+sub set_factory_resources {
+    my($provider_class, %params) = @_;
+
+    my $type = $params{type};
+
+    $params{factory} -> set_resources(
+        $type => "${provider_class}::Object" -> resource_requirements(
+            params => $params{params},
+            config => $params{config},
+        )
+    );
+
+    $params{factory} -> set_resources(
+        $type."_tag" => "${provider_class}::Tag" -> resource_requirements(
+            params => $params{params},
+            config => $params{config},
+        )
+    );
+
+    $params{factory} -> set_resources(
+        $type."_description" => "${provider_class}::Description" -> resource_requirements(
+            params => $params{params},
+            config => $params{config},
+        )
+    );
+
+    $params{factory} -> set_resources(
+        $type."_repository" => $provider_class -> resource_requirements(
+            params => $params{params},
+            config => $params{config},
+        )
+    );
+}
+
 sub import {
     my $class = shift;
 
     if(@_) {
+        return ;
         my $rep = shift;
         my $lcrep = lc $rep;
 
@@ -31,14 +73,14 @@ sub import {
 
         my $package = caller;
 
-        my $pcode = <<1HERE1;
+        my $pcode = <<EOF;
 package $package;
 
 use base qw($class);
 
 use constant repository => qq{$rep\E};
 use constant repository_key => qq{\Q$lcrep\E};
-1HERE1
+EOF
 
         eval $pcode;
         warn "Error defining package $package: $@\n" if $@;
@@ -72,7 +114,7 @@ use constant repository_key => qq{\Q$lcrep\E};
             $INC{$inc_entry} = $inc_entry unless exists $INC{$inc_entry};  # trick Class::Factory into thinking it's already loaded
             my $base_classes = join("\n    ", @{$params{lc($subclass)."_classes"}||[]}, $base_class);
 
-            my $code = <<1HERE1;
+            my $code = <<EOF;
 package $classes{$subclass};
 use base qw(
     $base_classes
@@ -83,7 +125,7 @@ use base qw(
 *repository = \\&${package}::repository;
 *repository_key = \\&${package}::repository_key;
 
-1HERE1
+EOF
 
             foreach (keys %classes) {
                 my $lcc = lc $_;
@@ -230,6 +272,125 @@ sub listing {
     return { files => \@files, folders => \@dirs };
 }
 
+#        $class -> build_object_class(
+#            params => $data_providers -> {$type} -> {params},
+#            class => $provider_class,
+#            config => $data_providers -> {$type} -> {config},
+#            site => $self,
+
+sub build_object_class {
+    my($class, %params) = @_;
+
+    no strict 'refs';
+
+    my $rep = $params{params}{repository};
+    my $lcrep = lc $rep;
+
+    my $package = $params{class};
+             
+    my $pcode = <<EOF;
+package $package;
+            
+use base qw($class);
+            
+our \$VERSION = 1;
+use constant repository => qq{\Q$rep\E};
+use constant repository_key => qq{\Q$lcrep\E};
+EOF
+  
+    eval $pcode;
+    if($@) {
+        warn "Error defining package $package: $@\n";
+        return 0;
+    }
+
+    my %classes = (
+        Tag => "${package}::Tag",
+        Object => "${package}::Object",
+        Description => "${package}::Description",
+    );
+
+    my %tables = (
+        Tag => $params{params}{repository} . "_Tag",
+        Object => $params{params}{repository},
+        Description => $params{params}{repository} . "_Description",
+    );
+
+    foreach my $subclass (keys %classes) {
+
+        eval "require $classes{$subclass};";
+
+        my $base_class = qq{${class}::${subclass}};
+        eval "require $base_class;";
+        warn "require $base_class failed: $@\n" if $@;
+
+        if(!defined $base_class -> VERSION) {
+            eval { eval "require $base_class;" };
+            ${$base_class . "::VERSION"} = '-1, defined by ' . __PACKAGE__
+                unless defined $base_class -> VERSION;
+        }
+
+        my $inc_entry = $classes{$subclass};
+        $inc_entry =~ s{::}{/}g;
+        $inc_entry .= ".pm";
+
+        $INC{$inc_entry} = $inc_entry unless exists $INC{$inc_entry};  # trick Class::Factory into thinking it's already loaded
+        my $base_classes = join("\n    ", @{$params{lc($subclass)."_classes"}||[]}, $base_class);
+
+        my $code = <<EOF;
+package $classes{$subclass};
+use base qw(
+    $base_classes
+);
+
+\$${classes{$subclass}}::VERSION = $class -> VERSION;
+    
+*repository = \\&${package}::repository;
+*repository_key = \\&${package}::repository_key;
+        
+EOF
+        
+        foreach (keys %classes) {
+            my $lcc = lc $_;
+            my $clc = $classes{$_};
+            $code .= "use constant ${lcc}_class => qq{\Q$clc\E};\n";
+        }
+
+        eval $code;
+        if($@) {
+            warn "Unable to create class $classes{$subclass}: $@\n";
+            return 0;
+        }
+
+        $base_class -> build_object_class(
+            class => $classes{$subclass},
+            params => { %{$params{params}},
+                        table => $tables{$subclass},
+                      },
+        ) or return 0;
+
+    }
+    return 1;
+}
+
+sub resource_requirements {
+    my $class = shift;
+
+    $class = ref $class || $class;
+    my %params = @_;
+
+    my $resource_attr;
+    no strict 'refs';
+    foreach my $c ($class, Class::ISA::super_path($class)) {
+        $resource_attr = ${"${c}::RESOURCE"};
+        last if defined $resource_attr;
+    }
+     
+    return { } unless defined $resource_attr;
+
+    return { $resource_attr => $params{params} -> {resource} };
+}
+
 1;
 
 __END__
@@ -242,9 +403,14 @@ Gestinanna::POF::Repository - basic support for a revision controlled repository
 
 Creating a repository based on the C<Files> table:
 
- package My::Files;
-
- use Gestinanna::POF::Repository qw(Files);
+ use Gestinanna::POF::Repository;
+                
+ Gestinanna::POF::Repository -> build_object_class(
+     class => 'My::Files',
+     params => {
+         repository => 'Files',
+     },
+ );
 
 
 Using the above repository:
@@ -372,12 +538,6 @@ This will add the various object types to the factory, mapping them to
 the appropriate Perl classes.  The type is optional and will default 
 the the primary table name (except all lowercase).  For example:
 
- package My::Repository;
-
- use Gestinanna::POF::Repository qw(Foo);
-
- package main;
-
  My::Repository -> add_factory_types($factory);
 
 This will add the following object mappings:
@@ -413,7 +573,7 @@ James G. Smith, <jsmith@cpan.org>
 
 =head1 COPYRIGHT
             
-Copyright (C) 2002-2003 Texas A&M University.  All Rights Reserved.
+Copyright (C) 2002-2004 Texas A&M University.  All Rights Reserved.
         
 This module is free software; you can redistribute it and/or
 modify it under the same terms as Perl itself.  

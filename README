@@ -1,5 +1,5 @@
                  --------------------------------
-                 Gestinanna::POF::Repository 0.03
+                 Gestinanna::POF::Repository 0.04
                  --------------------------------
 
 Gestinanna::POF::Repository manages a revision controlled data store 
@@ -54,4 +54,4 @@ Copyright (C) 2002-2004  Texas A&M University.  All Rights Reserved.
 This program is free software; you can redistribute it and/or modify it
 under the same terms as Perl itself.
 
-$Id: README,v 1.2 2004/02/24 16:26:57 jgsmith Exp $
+$Id: README,v 1.3 2004/06/25 06:35:44 jgsmith Exp $

@@ -67,7 +67,7 @@ sub data_columns {
     return [ ] unless defined $self -> {alzabo_schema};
     my $table = $self -> {alzabo_schema} -> table($self -> table);
     $self -> {_data_columns} =
-        [ grep { $_ =~ m{^data(_.*)?$} } map { $_ -> name } grep { $_ -> is_blob } $table -> columns ];
+        [ grep { $_ =~ m{^data(_.*)?$} } map { $_ -> name } grep { $_ -> is_character || $_ -> is_blob } $table -> columns ];
 }
 
 # does this document/object already exist in the repository 
@@ -284,8 +284,8 @@ sub save {
     my @target_rev_a = $self -> _decode_rev($target_rev);
     my $branch = $self -> _encode_rev(@target_rev_a[0..$#target_rev_a-1]);
 
-    #main::diag("bits: <" . join("><", @bits) . ">");
-    #main::diag("target rev: $target_rev; branch: $branch\n");
+    #warn("bits: <" . join("><", @bits) . ">\n");
+    #warn("target rev: $target_rev; branch: $branch\n");
 
     my $table = $self -> {alzabo_schema} -> table($self -> table);
     my $name_col = $table -> column('name');

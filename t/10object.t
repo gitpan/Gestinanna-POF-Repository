@@ -299,10 +299,16 @@ sub run_api_tests {
 
 1;
 
-package My::Rep::Foo;
+BEGIN {
+    use Gestinanna::POF::Repository;
 
-use Gestinanna::POF::Repository qw(Foo);
+Gestinanna::POF::Repository -> build_object_class(
+    class => 'My::Rep::Foo',
+    params => {
+        repository => 'Foo',
+    },
+);
 
-
+}
 
 1;

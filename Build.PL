@@ -6,8 +6,8 @@ my $m = Module::Build -> new(
     license => 'perl',
     requires => {
         Algorithm::Diff => 1.15,
-        Alzabo => 0.67,
-        Gestinanna::POF => 0.06,
+        Alzabo => 0.82,
+        Gestinanna::POF => 0.07,
         Data::Serializer => 0,
     },
     recommends => {

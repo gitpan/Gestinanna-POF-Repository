@@ -1,3 +1,11 @@
+0.04     7 Jul 2004
+
+ o check for text or binary large objects, not just binary, when 
+   determining which columns are under revision control.
+
+ o change configuration mechanism to allow arbitrarily complex 
+   configuration for certain parts of the Gestinanna::POF framework.
+
 0.01   17 Jun 2003
 
 Initial release

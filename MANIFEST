@@ -17,5 +17,6 @@ t/99pod.t
 t/lib/Alzabo/Driver/SQLite.pm
 t/lib/Alzabo/RDBMSRules/SQLite.pm
 t/lib/Alzabo/SQLMaker/SQLite.pm
+t/lib/Class/Factory/Util.pm
 t/schema
 t/test-utils
